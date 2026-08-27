@@ -2,3 +2,5 @@ node_modules/
 dist/
 nnn.md
 .env
+# Generated Prisma Client
+api/src/generated/

@@ -1,1 +1,106 @@
-export default function App() { return <div className="text-3xl font-bold underline">Hello World!</div> }
+import { useState } from 'react';
+import { Navigation } from './components/Navigation';
+import { CaptureForm } from './components/CaptureForm';
+import { CaptureFeedback } from './components/CaptureFeedback';
+import { MemoryCard } from './components/MemoryCard';
+import { MemoriesPage } from './components/MemoriesPage';
+import { MemoryDetailPage } from './components/MemoryDetailPage';
+import { captureMemory } from './services/memoryApi';
+import type { CaptureOutcome } from './services/memoryApi';
+
+type CaptureState =
+  | { phase: 'idle' | 'submitting' }
+  | { phase: 'captured'; memory: Extract<CaptureOutcome, { kind: 'captured' }>['memory'] }
+  | { phase: 'unsupported'; reason?: string }
+  | { phase: 'ambiguous'; reason?: string }
+  | { phase: 'error' };
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState<'capture' | 'memories'>('capture');
+  const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
+
+  const [input, setInput] = useState('');
+  const [state, setState] = useState<CaptureState>({ phase: 'idle' });
+
+  async function handleSubmit() {
+    if (input.trim().length === 0) return;
+    setState({ phase: 'submitting' });
+    try {
+      const outcome = await captureMemory(input);
+      switch (outcome.kind) {
+        case 'captured':
+          setInput('');
+          setState({ phase: 'captured', memory: outcome.memory });
+          break;
+        case 'unsupported':
+          setState({ phase: 'unsupported', reason: outcome.reason });
+          break;
+        case 'ambiguous':
+          setState({ phase: 'ambiguous', reason: outcome.reason });
+          break;
+      }
+    } catch {
+      setState({ phase: 'error' });
+    }
+  }
+
+  const submitting = state.phase === 'submitting';
+
+  function handleTabChange(tab: 'capture' | 'memories') {
+    setActiveTab(tab);
+    setSelectedMemoryId(null);
+  }
+
+  return (
+    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-4 py-10">
+      <header className="mb-2">
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+          Memory assistant
+        </h1>
+        <p className="mt-1 text-slate-500">
+          Tell me something in your own words — I'll figure out what it means.
+        </p>
+      </header>
+
+      <div className="mt-4">
+        <Navigation activeTab={activeTab} onTabChange={handleTabChange} />
+      </div>
+
+      {activeTab === 'capture' ? (
+        <div className="flex-1">
+          <CaptureForm
+            input={input}
+            onInputChange={setInput}
+            onSubmit={handleSubmit}
+            submitting={submitting}
+          />
+
+          <div aria-live="polite" className="mt-6 space-y-4">
+            {!submitting && state.phase === 'captured' && (
+              <MemoryCard memory={state.memory} />
+            )}
+            {!submitting && state.phase === 'unsupported' && (
+              <CaptureFeedback kind="unsupported" reason={state.reason} />
+            )}
+            {!submitting && state.phase === 'ambiguous' && (
+              <CaptureFeedback kind="ambiguous" reason={state.reason} />
+            )}
+            {!submitting && state.phase === 'error' && <CaptureFeedback kind="error" />}
+          </div>
+        </div>
+      ) : selectedMemoryId ? (
+        <div className="flex-1">
+          <MemoryDetailPage
+            memoryId={selectedMemoryId}
+            onBack={() => setSelectedMemoryId(null)}
+          />
+        </div>
+      ) : (
+        <div className="flex-1">
+          <MemoriesPage onSelectMemory={setSelectedMemoryId} />
+        </div>
+      )}
+    </main>
+  );
+}
+
