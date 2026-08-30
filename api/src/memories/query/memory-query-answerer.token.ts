@@ -1,0 +1,1 @@
+export const MEMORY_QUERY_ANSWERER = Symbol('MEMORY_QUERY_ANSWERER');

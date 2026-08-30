@@ -13,6 +13,7 @@ import { MemoriesService } from './memories.service';
 import { CreateMemoryDto } from './dto/create-memory.dto';
 import { UpdateMemoryDto } from './dto/update-memory.dto';
 import { CaptureMemoryDto } from './dto/capture-memory.dto';
+import { QueryMemoryDto } from './dto/query-memory.dto';
 import { FindMemoriesQueryDto } from './dto/find-memories-query.dto';
 
 @Controller('memories')
@@ -36,11 +37,28 @@ export class MemoriesController {
     });
   }
 
+  @Post('query')
+  async query(@Body() dto: QueryMemoryDto) {
+    const result = await this.memoriesService.query(dto.input);
+    if (result.status === 'found') {
+      return {
+        status: 'found',
+        answer: result.answer,
+        memories: result.memories,
+      };
+    }
+    throw new UnprocessableEntityException({
+      status: result.status,
+      reason: result.reason ?? null,
+    });
+  }
+
   @Get()
   findAll(@Query() query: FindMemoriesQueryDto) {
-    return this.memoriesService.findAll(
-      query.type ? { type: query.type } : undefined,
-    );
+    return this.memoriesService.findAll({
+      type: query.type,
+      search: query.search,
+    });
   }
 
   @Get(':id')

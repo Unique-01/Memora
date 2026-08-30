@@ -7,6 +7,10 @@ import { MemoriesService } from './memories.service';
 import { MemoryRepository } from './repositories/memory.repository';
 import { FakeMemoryInterpreter } from './interpretation/fake-memory.interpreter';
 import { MEMORY_INTERPRETER } from './interpretation/memory-interpreter.token';
+import { MEMORY_QUERY_INTERPRETER } from './query/memory-query-interpreter.token';
+import { FakeMemoryQueryInterpreter } from './query/fake-memory-query.interpreter';
+import { MEMORY_QUERY_ANSWERER } from './query/memory-query-answerer.token';
+import { FakeMemoryQueryAnswerer } from './query/fake-memory-query.answerer';
 import { MemoryType } from '../generated/prisma/enums';
 
 const INPUT = 'I gave David my charger and he said he will return it tomorrow.';
@@ -96,6 +100,16 @@ describe('POST /memories/capture', () => {
         MemoriesService,
         { provide: MemoryRepository, useValue: repository },
         { provide: MEMORY_INTERPRETER, useValue: new FakeMemoryInterpreter() },
+        {
+          provide: MEMORY_QUERY_INTERPRETER,
+          useValue: new FakeMemoryQueryInterpreter(),
+        },
+        {
+          provide: MEMORY_QUERY_ANSWERER,
+          useValue: new FakeMemoryQueryAnswerer({
+            answer: 'Your passport is in the black backpack.',
+          }),
+        },
       ],
     }).compile();
 
@@ -281,7 +295,10 @@ describe('POST /memories/capture', () => {
       const body = queryBody(res);
       expect(Array.isArray(body)).toBe(true);
       expect(repository.findAll).toHaveBeenCalledTimes(1);
-      expect(repository.findAll).toHaveBeenCalledWith(undefined);
+      expect(repository.findAll).toHaveBeenCalledWith({
+        type: undefined,
+        search: undefined,
+      });
     });
 
     it('filters memories by type=BORROWED', async () => {
@@ -295,7 +312,10 @@ describe('POST /memories/capture', () => {
       const body = queryBody(res);
       expect(Array.isArray(body)).toBe(true);
       expect(repository.findAll).toHaveBeenCalledTimes(1);
-      expect(repository.findAll).toHaveBeenCalledWith({ type: 'BORROWED' });
+      expect(repository.findAll).toHaveBeenCalledWith({
+        type: 'BORROWED',
+        search: undefined,
+      });
     });
 
     it.each(Object.values(MemoryType))(
@@ -310,9 +330,44 @@ describe('POST /memories/capture', () => {
 
         const body = queryBody(res);
         expect(Array.isArray(body)).toBe(true);
-        expect(repository.findAll).toHaveBeenCalledWith({ type });
+        expect(repository.findAll).toHaveBeenCalledWith({
+          type,
+          search: undefined,
+        });
       },
     );
+
+    it('accepts search query parameter and passes it to repository', async () => {
+      repository.findAll.mockResolvedValue([createdMemory]);
+      configureInterpreter(supportedRaw);
+
+      const res = await request(app.getHttpServer())
+        .get('/memories?search=passport')
+        .expect(200);
+
+      const body = queryBody(res);
+      expect(Array.isArray(body)).toBe(true);
+      expect(repository.findAll).toHaveBeenCalledWith({
+        type: undefined,
+        search: 'passport',
+      });
+    });
+
+    it('accepts combined type and search query parameters', async () => {
+      repository.findAll.mockResolvedValue([createdMemory]);
+      configureInterpreter(supportedRaw);
+
+      const res = await request(app.getHttpServer())
+        .get('/memories?type=STORED&search=backpack')
+        .expect(200);
+
+      const body = queryBody(res);
+      expect(Array.isArray(body)).toBe(true);
+      expect(repository.findAll).toHaveBeenCalledWith({
+        type: 'STORED',
+        search: 'backpack',
+      });
+    });
 
     it('returns 400 for an invalid type value', async () => {
       configureInterpreter(supportedRaw);

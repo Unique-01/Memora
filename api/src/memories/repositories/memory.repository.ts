@@ -15,8 +15,48 @@ export class MemoryRepository {
    * descending (newest first). The ordering is hard-coded so the client
    * cannot influence it for this ticket.
    */
-  async findAll(filter?: { type?: MemoryType }): Promise<Memory[]> {
-    const where = filter?.type ? { type: filter.type } : undefined;
+  /**
+   * Retrieve all memories, optionally filtered by type and/or search query,
+   * sorted by createdAt descending (newest first).
+   */
+  async findAll(filter?: {
+    type?: MemoryType;
+    search?: string;
+  }): Promise<Memory[]> {
+    const typeCondition = filter?.type ? { type: filter.type } : undefined;
+    const searchCondition =
+      filter?.search && filter.search.trim().length > 0
+        ? {
+            OR: [
+              {
+                title: {
+                  contains: filter.search.trim(),
+                  mode: 'insensitive' as const,
+                },
+              },
+              {
+                summary: {
+                  contains: filter.search.trim(),
+                  mode: 'insensitive' as const,
+                },
+              },
+              {
+                content: {
+                  contains: filter.search.trim(),
+                  mode: 'insensitive' as const,
+                },
+              },
+            ],
+          }
+        : undefined;
+
+    let where: Prisma.MemoryWhereInput | undefined;
+    if (typeCondition && searchCondition) {
+      where = { AND: [typeCondition, searchCondition] };
+    } else {
+      where = typeCondition ?? searchCondition;
+    }
+
     return this.prisma.memory.findMany({
       where,
       orderBy: { createdAt: 'desc' },

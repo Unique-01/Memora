@@ -1,41 +1,60 @@
 import type { MemoryView } from '../services/memoryApi';
 import { formatDueLabel } from '../utils/formatDueDate';
 
-const TYPE_EMOJI: Record<string, string> = {
-  BORROWED: '🤝',
-  STORED: '📦',
-  LAST_DONE: '✅',
-  PROMISED: '🤞',
+const TYPE_LABEL: Record<string, string> = {
+  BORROWED: 'Borrowed',
+  STORED: 'Stored',
+  LAST_DONE: 'Last Done',
+  PROMISED: 'Promised',
+};
+
+const TYPE_CLASSES: Record<string, string> = {
+  BORROWED: 'bg-amber-50 text-amber-800 border-amber-200/60',
+  STORED: 'bg-sky-50 text-sky-800 border-sky-200/60',
+  LAST_DONE: 'bg-emerald-50 text-emerald-800 border-emerald-200/60',
+  PROMISED: 'bg-indigo-50 text-indigo-800 border-indigo-200/60',
 };
 
 export function MemoryCard({ memory }: { memory: MemoryView }) {
   const dueLabel = formatDueLabel(memory.dueAt);
-  const emoji = TYPE_EMOJI[memory.type] ?? '💭';
+  const typeName = TYPE_LABEL[memory.type] ?? memory.type;
+  const badgeClass = TYPE_CLASSES[memory.type] ?? 'bg-slate-100 text-slate-800 border-slate-200';
 
   return (
     <section
       aria-label="Remembered"
-      className="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm"
+      className="rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm space-y-4"
     >
-      <p className="flex items-center gap-2 text-sm font-medium text-emerald-700">
-        <span aria-hidden="true">✓</span> Remembered
-      </p>
-
-      <h2 className="mt-3 text-xl font-semibold text-slate-900">
-        <span aria-hidden="true" className="mr-2">
-          {emoji}
+      <div className="flex items-center justify-between">
+        <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-xs">
+            ✓
+          </span>
+          Successfully remembered
         </span>
-        {memory.title?.trim() || memory.summary?.trim() || 'Saved to your memories'}
-      </h2>
+        <span
+          className={`inline-flex items-center rounded-full border px-3 py-0.5 text-xs font-semibold tracking-wide ${badgeClass}`}
+        >
+          {typeName}
+        </span>
+      </div>
 
-      {memory.summary && (
-        <p className="mt-2 leading-relaxed text-slate-600">{memory.summary}</p>
-      )}
+      <div>
+        <h2 className="text-xl font-bold text-slate-900">
+          {memory.title?.trim() || memory.summary?.trim() || 'Saved to your memories'}
+        </h2>
+
+        {memory.summary && (
+          <p className="mt-2 leading-relaxed text-slate-600">{memory.summary}</p>
+        )}
+      </div>
 
       {dueLabel && (
-        <p className="mt-4 inline-block rounded-full bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-700">
-          {dueLabel}
-        </p>
+        <div>
+          <span className="inline-block rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+            {dueLabel}
+          </span>
+        </div>
       )}
     </section>
   );

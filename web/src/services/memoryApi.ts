@@ -4,6 +4,7 @@ export interface MemoryView {
   title: string | null;
   summary: string | null;
   dueAt: string | null;
+  completedAt: string | null;
 }
 
 export interface MemoryDetail {
@@ -65,13 +66,19 @@ export async function captureMemory(input: string): Promise<CaptureOutcome> {
 }
 
 /**
- * Fetches all memories or memories filtered by an optional MemoryType.
+ * Fetches all memories or memories filtered by an optional MemoryType and/or search term.
  * Throws on network or server errors.
  */
-export async function getMemories(type?: string): Promise<MemoryView[]> {
+export async function getMemories(
+  type?: string,
+  search?: string,
+): Promise<MemoryView[]> {
   const url = new URL(`${apiBaseUrl}/memories`, window.location.origin);
   if (type) {
     url.searchParams.set('type', type);
+  }
+  if (search && search.trim().length > 0) {
+    url.searchParams.set('search', search.trim());
   }
 
   let response: Response;
@@ -131,5 +138,51 @@ export async function updateMemory(
   }
 
   return (await response.json()) as MemoryDetail;
+}
+
+export type QueryOutcome =
+  | { kind: 'found'; answer: string; memories: MemoryView[] }
+  | { kind: 'unsupported'; reason?: string }
+  | { kind: 'ambiguous'; reason?: string };
+
+/**
+ * Sends a natural-language question to the query endpoint and maps outcomes.
+ */
+export async function queryMemories(input: string): Promise<QueryOutcome> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}/memories/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input }),
+    });
+  } catch {
+    throw new Error('query-request-failed');
+  }
+
+  if (response.status === 201 || response.status === 200) {
+    const body = (await response.json()) as {
+      status?: string;
+      answer?: string;
+      memories?: MemoryView[];
+    };
+    return {
+      kind: 'found',
+      answer: body.answer ?? '',
+      memories: body.memories ?? [],
+    };
+  }
+
+  if (response.status === 422) {
+    const body = (await response.json().catch(() => null)) as {
+      status?: string;
+      reason?: string | null;
+    } | null;
+    if (body?.status === 'unsupported' || body?.status === 'ambiguous') {
+      return { kind: body.status, reason: body.reason ?? undefined };
+    }
+  }
+
+  throw new Error('query-request-failed');
 }
 

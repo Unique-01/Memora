@@ -20,6 +20,7 @@ This repository is a monorepo containing two independent applications: `api/` (N
 - Prisma access is encapsulated: `MemoryRepository` -> `PrismaService` (`api/src/database/`) -> PostgreSQL. Do not instantiate `PrismaClient` elsewhere.
 - Interpretation layer (`api/src/memories/interpretation/`): `MemoryInterpreter` interface + validation boundary. `OpenRouterMemoryInterpreter` (`interpretation/providers/openrouter-memory.interpreter.ts`, model `openai/gpt-oss-20b`) is bound to the `MEMORY_INTERPRETER` symbol in `memories.module.ts`; consumers never import concrete interpreters. Config: `OPENROUTER_API_KEY`, `AI_MODEL`, `OPENROUTER_BASE_URL`. Provider code uses native fetch only — no SDK.
 - Capture flow: `POST /memories/capture` (`MemoriesController` → `MemoriesService.capture` → interpreter → repository). Original input becomes `Memory.content` verbatim; unsupported/ambiguous interpretations return HTTP 422 without persisting.
+- Query and Search flow: `GET /memories` supports optional `type` filter and case-insensitive partial text `search` (matching `title`, `summary`, or `content`), ordered deterministically by `createdAt` descending.
 - Apply schema changes with migrations: `pnpm prisma migrate dev` (never `prisma db push`).
 - Tailwind CSS is configured in `web/` with `@import "tailwindcss";` in `src/index.css`.
 - Both projects use `pnpm`. If a command fails due to missing dependencies, ensure `pnpm install` has been run in the appropriate project directory.

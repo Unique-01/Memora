@@ -5,8 +5,9 @@ import { CaptureFeedback } from './components/CaptureFeedback';
 import { MemoryCard } from './components/MemoryCard';
 import { MemoriesPage } from './components/MemoriesPage';
 import { MemoryDetailPage } from './components/MemoryDetailPage';
-import { captureMemory } from './services/memoryApi';
-import type { CaptureOutcome } from './services/memoryApi';
+import { AskPage } from './components/AskPage';
+import { captureMemory, queryMemories } from './services/memoryApi';
+import type { CaptureOutcome, MemoryView } from './services/memoryApi';
 
 type CaptureState =
   | { phase: 'idle' | 'submitting' }
@@ -15,12 +16,23 @@ type CaptureState =
   | { phase: 'ambiguous'; reason?: string }
   | { phase: 'error' };
 
+type AskState =
+  | { kind: 'idle' }
+  | { kind: 'found'; answer: string; memories: MemoryView[] }
+  | { kind: 'unsupported'; reason?: string }
+  | { kind: 'ambiguous'; reason?: string }
+  | { kind: 'error' };
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'capture' | 'memories'>('capture');
+  const [activeTab, setActiveTab] = useState<'capture' | 'memories' | 'ask'>('capture');
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
 
   const [input, setInput] = useState('');
   const [state, setState] = useState<CaptureState>({ phase: 'idle' });
+
+  const [askInput, setAskInput] = useState('');
+  const [askSubmitting, setAskSubmitting] = useState(false);
+  const [askOutcome, setAskOutcome] = useState<AskState>({ kind: 'idle' });
 
   async function handleSubmit() {
     if (input.trim().length === 0) return;
@@ -44,9 +56,33 @@ export default function App() {
     }
   }
 
+  async function handleAskSubmit() {
+    if (askInput.trim().length === 0 || askSubmitting) return;
+    setAskSubmitting(true);
+    setAskOutcome({ kind: 'idle' });
+    try {
+      const outcome = await queryMemories(askInput);
+      switch (outcome.kind) {
+        case 'found':
+          setAskOutcome({ kind: 'found', answer: outcome.answer, memories: outcome.memories });
+          break;
+        case 'unsupported':
+          setAskOutcome({ kind: 'unsupported', reason: outcome.reason });
+          break;
+        case 'ambiguous':
+          setAskOutcome({ kind: 'ambiguous', reason: outcome.reason });
+          break;
+      }
+    } catch {
+      setAskOutcome({ kind: 'error' });
+    } finally {
+      setAskSubmitting(false);
+    }
+  }
+
   const submitting = state.phase === 'submitting';
 
-  function handleTabChange(tab: 'capture' | 'memories') {
+  function handleTabChange(tab: 'capture' | 'memories' | 'ask') {
     setActiveTab(tab);
     setSelectedMemoryId(null);
   }
@@ -66,7 +102,7 @@ export default function App() {
         <Navigation activeTab={activeTab} onTabChange={handleTabChange} />
       </div>
 
-      {activeTab === 'capture' ? (
+      {activeTab === 'capture' && (
         <div className="flex-1">
           <CaptureForm
             input={input}
@@ -88,19 +124,44 @@ export default function App() {
             {!submitting && state.phase === 'error' && <CaptureFeedback kind="error" />}
           </div>
         </div>
-      ) : selectedMemoryId ? (
+      )}
+
+      {activeTab === 'memories' && !selectedMemoryId && (
+        <div className="flex-1">
+          <MemoriesPage onSelectMemory={setSelectedMemoryId} />
+        </div>
+      )}
+
+      {activeTab === 'memories' && selectedMemoryId && (
         <div className="flex-1">
           <MemoryDetailPage
             memoryId={selectedMemoryId}
             onBack={() => setSelectedMemoryId(null)}
           />
         </div>
-      ) : (
+      )}
+
+      {activeTab === 'ask' && !selectedMemoryId && (
         <div className="flex-1">
-          <MemoriesPage onSelectMemory={setSelectedMemoryId} />
+          <AskPage
+            input={askInput}
+            onInputChange={setAskInput}
+            onSubmit={handleAskSubmit}
+            submitting={askSubmitting}
+            outcome={askOutcome}
+            onSelectMemory={setSelectedMemoryId}
+          />
+        </div>
+      )}
+
+      {activeTab === 'ask' && selectedMemoryId && (
+        <div className="flex-1">
+          <MemoryDetailPage
+            memoryId={selectedMemoryId}
+            onBack={() => setSelectedMemoryId(null)}
+          />
         </div>
       )}
     </main>
   );
 }
-

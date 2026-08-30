@@ -82,16 +82,29 @@ describe('MemoryRepository', () => {
     );
   });
 
-  it('findAll returns an empty array when no memories match the filter', async () => {
-    prismaMemory.findMany.mockResolvedValue([]);
+  it('findAll filters by search query and type combined', async () => {
+    prismaMemory.findMany.mockResolvedValue([storedMemory]);
 
-    const result = await repository.findAll({ type: 'PROMISED' });
+    const result = await repository.findAll({
+      type: 'STORED',
+      search: 'passport',
+    });
 
-    expect(result).toEqual([]);
-    expect(prismaMemory.findMany).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([storedMemory]);
     expect(prismaMemory.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { type: 'PROMISED' },
+        where: {
+          AND: [
+            { type: 'STORED' },
+            {
+              OR: [
+                { title: { contains: 'passport', mode: 'insensitive' } },
+                { summary: { contains: 'passport', mode: 'insensitive' } },
+                { content: { contains: 'passport', mode: 'insensitive' } },
+              ],
+            },
+          ],
+        },
         orderBy: { createdAt: 'desc' },
       }),
     );

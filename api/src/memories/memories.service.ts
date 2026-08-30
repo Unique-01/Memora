@@ -4,8 +4,16 @@ import { MemoryRepository } from './repositories/memory.repository';
 import { CreateMemoryDto } from './dto/create-memory.dto';
 import { UpdateMemoryDto } from './dto/update-memory.dto';
 import { MEMORY_INTERPRETER } from './interpretation/memory-interpreter.token';
+import { MEMORY_QUERY_INTERPRETER } from './query/memory-query-interpreter.token';
+import { MEMORY_QUERY_ANSWERER } from './query/memory-query-answerer.token';
+import type { MemoryQueryAnswerer } from './query/memory-query-answerer.interface';
 import type { MemoryInterpreter } from './interpretation/memory-interpreter.interface';
+import type { MemoryQueryInterpreter } from './query/memory-query-interpreter.interface';
 import type { InterpretationContext } from './interpretation/memory-interpreter.interface';
+import type {
+  QueryInterpretationContext,
+  MemoryQueryResult,
+} from './query/memory-query.types';
 import type { InterpretedDate } from './interpretation/memory-interpretation.types';
 import type { Memory, MemoryType } from '../generated/prisma/client';
 
@@ -19,11 +27,20 @@ export type CaptureMemoryResult =
   | { status: 'unsupported'; reason?: string }
   | { status: 'ambiguous'; reason?: string };
 
+export type QueryMemoryResult =
+  | { status: 'found'; answer: string; memories: Memory[] }
+  | { status: 'unsupported'; reason?: string }
+  | { status: 'ambiguous'; reason?: string };
+
 @Injectable()
 export class MemoriesService {
   constructor(
     private repository: MemoryRepository,
     @Inject(MEMORY_INTERPRETER) private readonly interpreter: MemoryInterpreter,
+    @Inject(MEMORY_QUERY_INTERPRETER)
+    public queryInterpreter: MemoryQueryInterpreter,
+    @Inject(MEMORY_QUERY_ANSWERER)
+    public queryAnswerer: MemoryQueryAnswerer,
   ) {}
 
   async create(createMemoryDto: CreateMemoryDto): Promise<Memory> {
@@ -82,8 +99,53 @@ export class MemoriesService {
    * Ordering (newest-first) is the repository's responsibility, keeping the
    * client unable to influence sort order for this ticket.
    */
-  async findAll(filter?: { type?: MemoryType }): Promise<Memory[]> {
+  /**
+   * Retrieves all memories, optionally narrowed to a single MemoryType
+   * and/or search term.
+   */
+  async findAll(filter?: {
+    type?: MemoryType;
+    search?: string;
+  }): Promise<Memory[]> {
     return this.repository.findAll(filter);
+  }
+
+  async query(input: string): Promise<QueryMemoryResult> {
+    const context: QueryInterpretationContext = {
+      referenceTime: new Date().toISOString(),
+    };
+    const result: MemoryQueryResult = await this.queryInterpreter.interpret(
+      input,
+      context,
+    );
+
+    if (result.status === 'unsupported' || result.status === 'ambiguous') {
+      return {
+        status: result.status,
+        reason: result.reason,
+      };
+    }
+
+    const memories = await this.repository.findAll({
+      type: result.query.type ?? undefined,
+      search: result.query.searchTerm ?? undefined,
+    });
+
+    if (memories.length === 0) {
+      return {
+        status: 'found',
+        answer: 'No matching memories found.',
+        memories: [],
+      };
+    }
+
+    const { answer } = await this.queryAnswerer.answer(input, memories);
+
+    return {
+      status: 'found',
+      answer,
+      memories,
+    };
   }
 
   async findById(id: string): Promise<Memory> {
